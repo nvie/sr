@@ -1,8 +1,15 @@
 [package]
 name = "sr"
+description = "A mass search & replace tool"
 version = "0.1.0"
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+ansi_term = "0.12"
+anyhow = "1.0"
+clap = { version = "3.0", features = ["derive"] }
+ctrlc = "3.2"
+walkdir = "2.3"
+regex = "1.5"
