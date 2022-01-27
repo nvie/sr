@@ -1,6 +1,9 @@
 [package]
 name = "sr"
 description = "A mass search & replace tool"
+authors = ["Vincent Driessen"]
+license = "MIT"
+license-file = "LICENSE"
 version = "0.1.0"
 edition = "2021"
 
