@@ -4,8 +4,9 @@ use anyhow::{Context, Result};
 use clap::Parser;
 use ctrlc::set_handler;
 use regex::Regex;
-use std::path::PathBuf;
-use walkdir::WalkDir;
+use std::path::{Path, PathBuf};
+use std::string::String;
+use walkdir::{DirEntry, WalkDir};
 
 #[derive(Parser)]
 #[clap(version, about, long_about = None)]
@@ -28,6 +29,22 @@ fn setup_ctrlc() {
     .expect("Error setting Ctrl-C handler");
 }
 
+fn basename(path: &Path) -> Option<&str> {
+    path.file_name().and_then(|basename| basename.to_str())
+}
+
+fn is_hidden(entry: &DirEntry) -> bool {
+    basename(entry.path()).map_or(false, |s| s.starts_with('.'))
+}
+
+fn is_file(entry: &DirEntry) -> bool {
+    entry.metadata().unwrap().is_file()
+}
+
+fn include_entry(entry: &DirEntry) -> bool {
+    is_file(entry) || !is_hidden(entry)
+}
+
 fn main() -> Result<()> {
     setup_ctrlc();
 
@@ -37,67 +54,55 @@ fn main() -> Result<()> {
     let re = Regex::new(&args.pattern)
         .with_context(|| format!("Not a valid regex: `{:?}`", args.pattern))?;
 
+    let mut last: String = String::new();
+
     for path in args.paths {
         for file in WalkDir::new(path)
             .into_iter()
-            .filter_entry(|entry| {
-                let metadata = entry.metadata().unwrap();
-                !metadata.is_file()
-                    || (entry
-                        .path()
-                        .file_name()
-                        .map(|basename| match basename.to_str() {
-                            None => false,
-                            Some(s) => !(s.starts_with(".")),
-                        })
-                        .is_some())
-            })
+            .filter_entry(include_entry)
             .filter_map(|file| file.ok())
         {
-            if file.metadata().unwrap().is_file() {
-                let path = file.path();
+            if !is_file(&file) {
+                continue;
+            }
 
-                let pathstr: &str = file
-                    .path()
-                    .to_str()
-                    .with_context(|| format!("Error in file name"))?;
+            let path = file.path();
+            let pathstr: &str = file
+                .path()
+                .to_str()
+                .with_context(|| "Error in file name".to_string())?;
 
-                let content = match std::fs::read_to_string(&path) {
-                    Err(_) => {
-                        eprintln!("Skipping {} (binary?)", pathstr);
-                        continue;
-                    }
-                    Ok(content) => content,
-                };
-
-                println!("{}", Blue.paint(pathstr));
-                for (lineno0, line) in content.lines().enumerate() {
-                    for m in re.find_iter(line) {
-                        let lineno = lineno0 + 1;
-                        println!(
-                            "{:5}  {}{}{}",
-                            lineno,
-                            &line[..m.start()],
-                            Purple.paint(&line[m.start()..m.end()]),
-                            &line[m.end()..]
-                        );
-                    }
+            let content = match std::fs::read_to_string(&path) {
+                Err(_) => {
+                    eprintln!("Skipping {} (binary?)", pathstr);
+                    continue;
                 }
-                println!("");
+                Ok(content) => content,
+            };
+
+            for (lineno0, line) in content.lines().enumerate() {
+                for m in re.find_iter(line) {
+                    if last != pathstr {
+                        if !last.is_empty() {
+                            // This is the first loop, no separator needed here
+                            println!();
+                        }
+                        println!("{}", Blue.paint(pathstr));
+                        last = String::from(pathstr);
+                    }
+
+                    let lineno = lineno0 + 1;
+                    println!(
+                        "{:5}  {}{}{}",
+                        lineno,
+                        &line[..m.start()],
+                        Purple.paint(&line[m.start()..m.end()]),
+                        &line[m.end()..]
+                    );
+                }
             }
         }
     }
-
-    // for root in args.paths {
-    //     let dir = PathDir::new(root)?;
-    //     for entry in dir.walk() {
-    //         match PathType::from_entry(entry?)? {
-    //             PathType::File(file) => {
-
-    // }
-    // }
-    // }
-    // }
 
     Ok(())
 }
