@@ -7,6 +7,8 @@ use regex::Regex;
 use std::fs;
 use std::io::Read;
 use std::path::{Path, PathBuf};
+use std::process::Command;
+use std::str::from_utf8;
 use std::string::String;
 use walkdir::{DirEntry, WalkDir};
 
@@ -25,7 +27,7 @@ struct CliArgs {
     #[clap(short = 'r', long = "replace")]
     replace: Option<String>,
 
-    #[clap(parse(from_os_str), required = true)]
+    #[clap(parse(from_os_str))]
     paths: Vec<PathBuf>,
 }
 
@@ -35,6 +37,26 @@ fn setup_ctrlc() {
         println!("received Ctrl+C!");
     })
     .expect("Error setting Ctrl-C handler");
+}
+
+fn files_from_git() -> Result<Vec<PathBuf>> {
+    // Lists all local files under Git control
+    let out = Command::new("git")
+        .arg("ls-files")
+        .args([
+            "--cached",
+            "--modified",
+            "--others",
+            "--exclude-standard",
+            "--deduplicate",
+        ])
+        .output()?;
+
+    // TODO: It's a known thing that git ls-files will "escape" file names with weird characters in
+    // them. We should read up on how to convert those back to normal strings.
+
+    let raw = from_utf8(&out.stdout)?;
+    Ok(raw.lines().map(PathBuf::from).collect())
 }
 
 fn make_pattern(pattern: &str, case_insensitive: bool) -> String {
@@ -101,7 +123,20 @@ fn main() -> Result<()> {
 
     let mut last: String = String::new();
 
-    for path in args.paths {
+    let all_paths: Vec<PathBuf> = if !args.paths.is_empty() {
+        args.paths
+    } else {
+        match files_from_git() {
+            Ok(paths) => paths,
+            Err(_) => {
+                panic!("No input files specified")
+            }
+        }
+    };
+
+    let mut count = 0;
+
+    for path in all_paths {
         for file in WalkDir::new(path)
             .into_iter()
             .filter_entry(include_entry)
@@ -141,6 +176,7 @@ fn main() -> Result<()> {
                 if content != new_content {
                     fs::write(path, &*new_content)
                         .with_context(|| format!("Unable to write to file `{}`", path.display()))?;
+                    count += 1;
                     println!("{}", path.display());
                 } else {
                     println!(
@@ -172,6 +208,14 @@ fn main() -> Result<()> {
                     }
                 }
             }
+        }
+    }
+
+    if args.replace.is_some() {
+        if count > 0 {
+            println!("{} files changed", count);
+        } else {
+            println!("No files changed");
         }
     }
 
