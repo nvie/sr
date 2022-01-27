@@ -10,6 +10,7 @@ edition = "2021"
 ansi_term = "0.12"
 anyhow = "1.0"
 clap = { version = "3.0", features = ["derive"] }
+content_inspector = "0.2"
 ctrlc = "3.2"
-walkdir = "2.3"
 regex = "1.5"
+walkdir = "2.3"
