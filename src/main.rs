@@ -46,7 +46,6 @@ fn files_from_git() -> Result<Vec<PathBuf>> {
         .args([
             "--cached",
             "--modified",
-            "--others",
             "--exclude-standard",
             "--deduplicate",
         ])
