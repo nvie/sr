@@ -1,5 +1,4 @@
-extern crate walkdir;
-use ansi_term::Colour::{Blue, Purple};
+use ansi_term::Colour::{Blue, Fixed, Purple};
 use anyhow::{Context, Result};
 use clap::Parser;
 use ctrlc::set_handler;
@@ -45,6 +44,25 @@ fn include_entry(entry: &DirEntry) -> bool {
     is_file(entry) || !is_hidden(entry)
 }
 
+fn highlight_matches(re: &Regex, line: &str) -> Option<String> {
+    let mut rv = String::from(line);
+
+    for m in Vec::from_iter(re.find_iter(line)).into_iter().rev() {
+        rv = format!(
+            "{}{}{}",
+            &rv[..m.start()],
+            Purple.paint(&rv[m.start()..m.end()]),
+            &rv[m.end()..]
+        )
+    }
+
+    if rv == line {
+        None
+    } else {
+        Some(rv)
+    }
+}
+
 fn main() -> Result<()> {
     setup_ctrlc();
 
@@ -81,7 +99,10 @@ fn main() -> Result<()> {
             };
 
             for (lineno0, line) in content.lines().enumerate() {
-                for m in re.find_iter(line) {
+                let lineno = lineno0 + 1;
+
+                let highlighted: Option<String> = highlight_matches(&re, &line);
+                if let Some(hline) = highlighted {
                     if last != pathstr {
                         if !last.is_empty() {
                             // This is the first loop, no separator needed here
@@ -91,13 +112,10 @@ fn main() -> Result<()> {
                         last = String::from(pathstr);
                     }
 
-                    let lineno = lineno0 + 1;
                     println!(
-                        "{:5}  {}{}{}",
-                        lineno,
-                        &line[..m.start()],
-                        Purple.paint(&line[m.start()..m.end()]),
-                        &line[m.end()..]
+                        "{}   {}",
+                        Fixed(248).dimmed().paint(format!("{:5}", lineno)),
+                        hline
                     );
                 }
             }
