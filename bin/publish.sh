@@ -12,7 +12,7 @@ cargo build --release
 ( cd target/release && tar -czf "$TARBALL" "$NAME" )
 
 URL="https://github.com/$GITHUB_USER/$GITHUB_REPO/releases/download/v$VERSION/$TARBALL"
-SHA=$(shasum -a 256 "target/release/$TARBALL")
+SHA=$(shasum -a 256 "target/release/$TARBALL" | cut -d' ' -f1)
 
 open -R "target/release/$TARBALL"
 
