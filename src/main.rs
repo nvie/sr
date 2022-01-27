@@ -10,6 +10,9 @@ use walkdir::{DirEntry, WalkDir};
 #[derive(Parser)]
 #[clap(version, about, long_about = None)]
 struct CliArgs {
+    #[clap(short = 'i', long = "case-insensitive")]
+    case_insensitive: bool,
+
     #[clap(short = 's', long = "search")]
     pattern: String,
 
@@ -26,6 +29,13 @@ fn setup_ctrlc() {
         println!("received Ctrl+C!");
     })
     .expect("Error setting Ctrl-C handler");
+}
+
+fn make_pattern(pattern: &str, case_insensitive: bool) -> String {
+    match case_insensitive {
+        true => format!("(?i){}", pattern),
+        false => String::from(pattern),
+    }
 }
 
 fn basename(path: &Path) -> Option<&str> {
@@ -69,8 +79,8 @@ fn main() -> Result<()> {
     let args = CliArgs::parse();
 
     // We may want to move this to a native "Cli" arg type? Read the clap docs to see how!
-    let re = Regex::new(&args.pattern)
-        .with_context(|| format!("Not a valid regex: `{:?}`", args.pattern))?;
+    let re = Regex::new(&make_pattern(&args.pattern, args.case_insensitive))
+        .with_context(|| format!("Not a valid regex: `{}`", &args.pattern))?;
 
     let mut last: String = String::new();
 
@@ -101,7 +111,7 @@ fn main() -> Result<()> {
             for (lineno0, line) in content.lines().enumerate() {
                 let lineno = lineno0 + 1;
 
-                let highlighted: Option<String> = highlight_matches(&re, &line);
+                let highlighted: Option<String> = highlight_matches(&re, line);
                 if let Some(hline) = highlighted {
                     if last != pathstr {
                         if !last.is_empty() {
