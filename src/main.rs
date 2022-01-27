@@ -1,8 +1,11 @@
 use ansi_term::Colour::{Blue, Fixed, Purple};
 use anyhow::{Context, Result};
 use clap::Parser;
+use content_inspector::inspect;
 use ctrlc::set_handler;
 use regex::Regex;
+use std::fs;
+use std::io::Read;
 use std::path::{Path, PathBuf};
 use std::string::String;
 use walkdir::{DirEntry, WalkDir};
@@ -10,6 +13,9 @@ use walkdir::{DirEntry, WalkDir};
 #[derive(Parser)]
 #[clap(version, about, long_about = None)]
 struct CliArgs {
+    #[clap(short, long)]
+    verbose: bool,
+
     #[clap(short = 'i', long = "case-insensitive")]
     case_insensitive: bool,
 
@@ -48,6 +54,17 @@ fn is_hidden(entry: &DirEntry) -> bool {
 
 fn is_file(entry: &DirEntry) -> bool {
     entry.metadata().unwrap().is_file()
+}
+
+fn is_binary_file(path: &Path) -> Result<bool> {
+    let mut buf = [0; 1024];
+    let mut f = fs::File::open(path)?;
+    let size = f.read(&mut buf)?;
+    Ok(inspect(&buf[..size]).is_binary())
+}
+
+fn is_text_file(path: &Path) -> bool {
+    !(is_binary_file(path).unwrap_or(true))
 }
 
 fn include_entry(entry: &DirEntry) -> bool {
@@ -100,33 +117,59 @@ fn main() -> Result<()> {
                 .to_str()
                 .with_context(|| "Error in file name".to_string())?;
 
-            let content = match std::fs::read_to_string(&path) {
+            if !is_text_file(path) {
+                if args.verbose {
+                    eprintln!(
+                        "{} (binary)",
+                        Fixed(248).dimmed().paint(pathstr.to_string())
+                    );
+                }
+                continue;
+            }
+
+            let content = match fs::read_to_string(&path) {
                 Err(_) => {
-                    eprintln!("Skipping {} (binary?)", pathstr);
+                    eprintln!("{} (read error)", pathstr);
                     continue;
                 }
                 Ok(content) => content,
             };
 
-            for (lineno0, line) in content.lines().enumerate() {
-                let lineno = lineno0 + 1;
-
-                let highlighted: Option<String> = highlight_matches(&re, line);
-                if let Some(hline) = highlighted {
-                    if last != pathstr {
-                        if !last.is_empty() {
-                            // This is the first loop, no separator needed here
-                            println!();
-                        }
-                        println!("{}", Blue.paint(pathstr));
-                        last = String::from(pathstr);
-                    }
-
+            if let Some(ref replacement) = args.replace {
+                // Inline-replace matches
+                let new_content = re.replace_all(&content, replacement);
+                if content != new_content {
+                    fs::write(path, &*new_content)
+                        .with_context(|| format!("Unable to write to file `{}`", path.display()))?;
+                    println!("{}", path.display());
+                } else {
                     println!(
-                        "{}   {}",
-                        Fixed(248).dimmed().paint(format!("{:5}", lineno)),
-                        hline
+                        "{}",
+                        Fixed(248).dimmed().paint(format!("{}", path.display()))
                     );
+                }
+            } else {
+                // Highlight matches
+                for (lineno0, line) in content.lines().enumerate() {
+                    let lineno = lineno0 + 1;
+
+                    let highlighted: Option<String> = highlight_matches(&re, line);
+                    if let Some(hline) = highlighted {
+                        if last != pathstr {
+                            if !last.is_empty() {
+                                // This is the first loop, no separator needed here
+                                println!();
+                            }
+                            println!("{}", Blue.paint(pathstr));
+                            last = String::from(pathstr);
+                        }
+
+                        println!(
+                            "{}   {}",
+                            Fixed(248).dimmed().paint(format!("{:5}", lineno)),
+                            hline
+                        );
+                    }
                 }
             }
         }
