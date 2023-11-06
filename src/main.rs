@@ -192,7 +192,7 @@ fn main() -> Result<()> {
                     if let Some(hline) = highlighted {
                         if last != pathstr {
                             if !last.is_empty() {
-                                // This is the first loop, no separator needed here
+                                // Print separator unless this is the first loop
                                 println!();
                             }
                             println!("{}", Blue.paint(pathstr));
