@@ -3,7 +3,7 @@ use anyhow::{Context, Result};
 use clap::Parser;
 use content_inspector::inspect;
 use ctrlc::set_handler;
-use regex::Regex;
+use regex::{Regex, RegexBuilder};
 use std::fs;
 use std::io::Read;
 use std::path::{Path, PathBuf};
@@ -58,13 +58,6 @@ fn files_from_git() -> Result<Vec<PathBuf>> {
     Ok(raw.lines().map(PathBuf::from).collect())
 }
 
-fn make_pattern(pattern: &str, case_insensitive: bool) -> String {
-    match case_insensitive {
-        true => format!("(?i){}", pattern),
-        false => String::from(pattern),
-    }
-}
-
 fn basename(path: &Path) -> Option<&str> {
     path.file_name().and_then(|basename| basename.to_str())
 }
@@ -117,7 +110,9 @@ fn main() -> Result<()> {
     let args = CliArgs::parse();
 
     // We may want to move this to a native "Cli" arg type? Read the clap docs to see how!
-    let re = Regex::new(&make_pattern(&args.pattern, args.case_insensitive))
+    let re = RegexBuilder::new(&args.pattern)
+        .case_insensitive(args.case_insensitive)
+        .build()
         .with_context(|| format!("Not a valid regex: `{}`", &args.pattern))?;
 
     let mut last: String = String::new();
