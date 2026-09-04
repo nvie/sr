@@ -27,6 +27,14 @@ string to replace them all:
 $ sr -s 'banana' -r 'mango'
 ```
 
+To see exactly what those replacements will produce before touching any files,
+add `-n` (= dry run). It prints the same preview as `-s`, except it highlights
+what each match would _become_ rather than what it matched:
+
+```sh
+$ sr -s 'banana' -r 'mango' -n
+```
+
 **Please note that this is a destructive operation.** It does not make
 a backup[^1]. Please only use this on files checked into Git, and after
 checking the preview results (before adding the `-r 'replacement'` flag).

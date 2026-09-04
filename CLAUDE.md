@@ -38,9 +38,11 @@ GitHub release + Homebrew tap lines. It is run manually by nvie; never run it.
   `Blue` = file header, `Purple` = the matched substring, `Fixed(248).dimmed()`
   = de-emphasized (line numbers, unchanged/binary files). Reuse these, don't add
   new colors ad hoc.
-- **Preview vs. replace are the two modes**, branched on `args.replace.is_some()`
-  in the main loop. Any new behavior has to make sense in both, or be clearly
-  scoped to one.
+- **Three modes**, branched on `(&args.replace, args.dry_run)` in the main loop:
+  preview (`-s`), dry run (`-s -r -n`), and replace (`-s -r`). Preview and dry
+  run share `print_matches`, which highlights either the match itself or what it
+  would become. Any new behavior has to make sense in all three, or be clearly
+  scoped.
 - **Verbose is opt-in noise only.** `-v` adds skipped-file lines to stderr;
   normal operation stays quiet. Results go to stdout, problems to stderr.
 

@@ -112,6 +112,31 @@ fn replaces_anchored_matches_on_every_line() {
 }
 
 #[test]
+fn previews_the_replacement_in_a_dry_run() {
+    let tmp = tempdir();
+    let path = write_file(tmp.path(), "a.txt", "first\nhello world\n");
+
+    let output = sr(&["-s", "(hello) (world)", "-r", "$2 $1", "-n", &path]);
+
+    assert!(output.status.success());
+    let out = strip_ansi(&stdout(&output));
+    assert!(out.contains(&path));
+    assert!(out.contains("    2   world hello"));
+    // A dry run is a preview, so it reports no tally
+    assert!(!out.contains("files changed"));
+    assert_eq!(stderr(&output), "");
+    assert_eq!(fs::read_to_string(&path).unwrap(), "first\nhello world\n");
+}
+
+#[test]
+fn fails_on_a_dry_run_without_a_replacement() {
+    let output = sr(&["-s", "foo", "-n"]);
+
+    assert!(!output.status.success());
+    assert!(stderr(&output).contains("--replace"));
+}
+
+#[test]
 fn reports_binary_files_when_verbose() {
     let tmp = tempdir();
     let path = write_file(tmp.path(), "a.bin", "needle\0\0\0");

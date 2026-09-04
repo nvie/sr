@@ -1,8 +1,9 @@
 ## Unreleased
 
-- Refuse to run outside a Git repository
+- Add `--dry-run` (`-n`), which previews each replacement before writing
+- Fix: replace now also works if `^` or `$` anchors are used
 - Fix: support files with special characters in them that Git would escape
-- Fix: `^` and `$` now anchor to line boundaries in replace mode, like they already did in preview mode
+- Fix: refuse to run outside a Git repository
 
 ## v0.1.1
 

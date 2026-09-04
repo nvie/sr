@@ -26,6 +26,10 @@ struct CliArgs {
     #[arg(short = 'r', long = "replace")]
     replace: Option<String>,
 
+    /// Previews the replacement without writing anything; meaningless without `--replace`
+    #[arg(short = 'n', long = "dry-run", requires = "replace")]
+    dry_run: bool,
+
     paths: Vec<PathBuf>,
 }
 
@@ -160,8 +164,35 @@ fn highlight_matches(re: &Regex, line: &str) -> Option<String> {
     }
 }
 
+fn highlight_replacements(re: &Regex, line: &str, replacement: &str) -> Option<String> {
+    let mut rv = String::new();
+    let mut end_of_last_match = 0;
+    let mut matched = false;
+
+    for caps in re.captures_iter(line) {
+        let m = caps.get(0).unwrap();
+
+        // `expand` resolves the `$1` / `${name}` references against this match's groups
+        let mut expanded = String::new();
+        caps.expand(replacement, &mut expanded);
+
+        rv.push_str(&line[end_of_last_match..m.start()]);
+        rv.push_str(&format!("{}", Purple.paint(expanded)));
+        end_of_last_match = m.end();
+        matched = true;
+    }
+
+    if !matched {
+        return None;
+    }
+
+    rv.push_str(&line[end_of_last_match..]);
+    Some(rv)
+}
+
 fn print_matches(
     re: &Regex,
+    replacement: Option<&str>,
     pathstr: &str,
     content: &str,
     last: &mut String,
@@ -170,7 +201,11 @@ fn print_matches(
     for (lineno0, line) in content.lines().enumerate() {
         let lineno = lineno0 + 1;
 
-        let highlighted: Option<String> = highlight_matches(re, line);
+        // With a replacement, the preview shows what the line would become rather than what matched
+        let highlighted: Option<String> = match replacement {
+            Some(replacement) => highlight_replacements(re, line, replacement),
+            None => highlight_matches(re, line),
+        };
         if let Some(hline) = highlighted {
             if last != pathstr {
                 if !last.is_empty() {
@@ -244,25 +279,33 @@ fn run(args: &CliArgs, out: &mut impl Write, err: &mut impl Write) -> Result<()>
             Ok(content) => content,
         };
 
-        if let Some(ref replacement) = args.replace {
+        match (&args.replace, args.dry_run) {
             // Inline-replace matches
-            if replace_in_file(&re, &path, &content, replacement)? {
-                count += 1;
-                writeln!(out, "{}", path.display())?;
-            } else {
-                writeln!(
-                    out,
-                    "{}",
-                    Fixed(248).dimmed().paint(format!("{}", path.display()))
-                )?;
+            (Some(replacement), false) => {
+                if replace_in_file(&re, &path, &content, replacement)? {
+                    count += 1;
+                    writeln!(out, "{}", path.display())?;
+                } else {
+                    writeln!(
+                        out,
+                        "{}",
+                        Fixed(248).dimmed().paint(format!("{}", path.display()))
+                    )?;
+                }
             }
-        } else {
-            // Highlight matches
-            print_matches(&re, pathstr, &content, &mut last, out)?;
+            // Highlight the matches, or in a dry run what they would become
+            (replacement, _) => print_matches(
+                &re,
+                replacement.as_deref(),
+                pathstr,
+                &content,
+                &mut last,
+                out,
+            )?,
         }
     }
 
-    if args.replace.is_some() {
+    if args.replace.is_some() && !args.dry_run {
         if count > 0 {
             writeln!(out, "{} files changed", count)?;
         } else {
@@ -322,6 +365,7 @@ mod tests {
             case_insensitive: false,
             pattern: String::from(pattern),
             replace: None,
+            dry_run: false,
             paths: paths.iter().map(PathBuf::from).collect(),
         }
     }
@@ -495,6 +539,30 @@ mod tests {
     }
 
     #[test]
+    fn highlighting_a_replacement_without_matches() {
+        let re = build_regex("nope", false).unwrap();
+        assert_eq!(highlight_replacements(&re, "hello world", "yes"), None);
+    }
+
+    #[test]
+    fn highlighting_replacements_shows_the_expanded_result() {
+        let re = build_regex("(hello) (world)", false).unwrap();
+        let hline = highlight_replacements(&re, "say hello world now", "$2 $1").unwrap();
+
+        assert_eq!(strip_ansi(&hline), "say world hello now");
+        assert_eq!(hline.matches(&format!("{}", Purple.prefix())).count(), 1);
+    }
+
+    #[test]
+    fn highlighting_replacements_covers_every_match_on_the_line() {
+        let re = build_regex("one", false).unwrap();
+        let hline = highlight_replacements(&re, "one two one", "three").unwrap();
+
+        assert_eq!(strip_ansi(&hline), "three two three");
+        assert_eq!(hline.matches(&format!("{}", Purple.prefix())).count(), 2);
+    }
+
+    #[test]
     fn printing_matches_writes_a_header_once_per_file() {
         let re = build_regex("match", false).unwrap();
         let mut last = String::new();
@@ -502,20 +570,43 @@ mod tests {
 
         print_matches(
             &re,
+            None,
             "a.txt",
             "no\nmatch here\nmatch again\n",
             &mut last,
             &mut out,
         )
         .unwrap();
-        print_matches(&re, "b.txt", "nothing\n", &mut last, &mut out).unwrap();
-        print_matches(&re, "c.txt", "a match\n", &mut last, &mut out).unwrap();
+        print_matches(&re, None, "b.txt", "nothing\n", &mut last, &mut out).unwrap();
+        print_matches(&re, None, "c.txt", "a match\n", &mut last, &mut out).unwrap();
 
         assert_eq!(
             strip_ansi(from_utf8(&out).unwrap()),
             "a.txt\n    2   match here\n    3   match again\n\nc.txt\n    1   a match\n"
         );
         assert_eq!(last, "c.txt");
+    }
+
+    #[test]
+    fn printing_matches_can_preview_the_replacement_instead() {
+        let re = build_regex("(one)", false).unwrap();
+        let mut last = String::new();
+        let mut out: Vec<u8> = Vec::new();
+
+        print_matches(
+            &re,
+            Some("[$1]"),
+            "a.txt",
+            "one two\nnothing\n",
+            &mut last,
+            &mut out,
+        )
+        .unwrap();
+
+        assert_eq!(
+            strip_ansi(from_utf8(&out).unwrap()),
+            "a.txt\n    1   [one] two\n"
+        );
     }
 
     #[test]
@@ -619,6 +710,21 @@ mod tests {
         assert!(out.contains(&format!("{}\n", hit.display())));
         assert!(out.contains(&format!("{}\n", miss.display())));
         assert!(out.ends_with("1 files changed\n"));
+        assert_eq!(err, "");
+    }
+
+    #[test]
+    fn running_in_dry_run_mode_previews_the_replacement_and_writes_nothing() {
+        let tmp = tempdir();
+        let path = write_file(tmp.path(), "a.txt", "one two\nnothing\n");
+
+        let mut args = args("one", &[&path]);
+        args.replace = Some(String::from("three"));
+        args.dry_run = true;
+        let (out, err) = capture(&args);
+
+        assert_eq!(fs::read_to_string(&path).unwrap(), "one two\nnothing\n");
+        assert_eq!(out, format!("{}\n    1   three two\n", path.display()));
         assert_eq!(err, "");
     }
 
@@ -737,6 +843,7 @@ mod tests {
         assert!(args.paths.is_empty());
         assert!(!args.verbose);
         assert!(!args.case_insensitive);
+        assert!(!args.dry_run);
 
         let args = CliArgs::parse_from(["sr", "-v", "-i", "-s", "foo", "-r", "bar", "a.txt", "b/"]);
         assert!(args.verbose);
@@ -760,6 +867,17 @@ mod tests {
         assert!(args.verbose);
         assert!(args.case_insensitive);
         assert_eq!(args.replace.as_deref(), Some("bar"));
+
+        let args = CliArgs::parse_from(["sr", "-s", "foo", "-r", "bar", "-n"]);
+        assert!(args.dry_run);
+
+        let args = CliArgs::parse_from(["sr", "--search", "foo", "--replace", "bar", "--dry-run"]);
+        assert!(args.dry_run);
+    }
+
+    #[test]
+    fn parsing_cli_args_rejects_a_dry_run_without_a_replacement() {
+        assert!(CliArgs::try_parse_from(["sr", "-s", "foo", "-n"]).is_err());
     }
 
     #[test]
