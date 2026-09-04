@@ -1,4 +1,4 @@
-## Unreleased
+## v0.2.0
 
 - Add `--dry-run` (`-n`), which previews each replacement before writing
 - Fix: replace now also works if `^` or `$` anchors are used
