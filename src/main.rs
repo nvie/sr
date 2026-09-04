@@ -92,6 +92,21 @@ fn build_regex(pattern: &str, case_insensitive: bool) -> Result<Regex> {
         .with_context(|| format!("Not a valid regex: `{}`", pattern))
 }
 
+fn walk_files(roots: &[PathBuf]) -> impl Iterator<Item = PathBuf> + '_ {
+    // Expands the given roots into every (non-hidden-directory) file below them, lazily: files are
+    // yielded (and processed) while the tree is still being walked
+    roots
+        .iter()
+        .flat_map(|root| {
+            WalkDir::new(root)
+                .into_iter()
+                .filter_entry(include_entry)
+                .filter_map(|entry| entry.ok())
+        })
+        .filter(is_file)
+        .map(|entry| entry.into_path())
+}
+
 fn highlight_matches(re: &Regex, line: &str) -> Option<String> {
     let mut rv = String::from(line);
 
@@ -133,76 +148,64 @@ fn main() -> Result<()> {
 
     let mut count = 0;
 
-    for path in all_paths {
-        for file in WalkDir::new(path)
-            .into_iter()
-            .filter_entry(include_entry)
-            .filter_map(|file| file.ok())
-        {
-            if !is_file(&file) {
+    for path in walk_files(&all_paths) {
+        let pathstr: &str = path
+            .to_str()
+            .with_context(|| "Error in file name".to_string())?;
+
+        if !is_text_file(&path) {
+            if args.verbose {
+                eprintln!(
+                    "{} (binary)",
+                    Fixed(248).dimmed().paint(pathstr.to_string())
+                );
+            }
+            continue;
+        }
+
+        let content = match fs::read_to_string(&path) {
+            Err(_) => {
+                eprintln!("{} (read error)", pathstr);
                 continue;
             }
+            Ok(content) => content,
+        };
 
-            let path = file.path();
-            let pathstr: &str = file
-                .path()
-                .to_str()
-                .with_context(|| "Error in file name".to_string())?;
-
-            if !is_text_file(path) {
-                if args.verbose {
-                    eprintln!(
-                        "{} (binary)",
-                        Fixed(248).dimmed().paint(pathstr.to_string())
-                    );
-                }
-                continue;
-            }
-
-            let content = match fs::read_to_string(&path) {
-                Err(_) => {
-                    eprintln!("{} (read error)", pathstr);
-                    continue;
-                }
-                Ok(content) => content,
-            };
-
-            if let Some(ref replacement) = args.replace {
-                // Inline-replace matches
-                let new_content = re.replace_all(&content, replacement);
-                if content != new_content {
-                    fs::write(path, &*new_content)
-                        .with_context(|| format!("Unable to write to file `{}`", path.display()))?;
-                    count += 1;
-                    println!("{}", path.display());
-                } else {
-                    println!(
-                        "{}",
-                        Fixed(248).dimmed().paint(format!("{}", path.display()))
-                    );
-                }
+        if let Some(ref replacement) = args.replace {
+            // Inline-replace matches
+            let new_content = re.replace_all(&content, replacement);
+            if content != new_content {
+                fs::write(&path, &*new_content)
+                    .with_context(|| format!("Unable to write to file `{}`", path.display()))?;
+                count += 1;
+                println!("{}", path.display());
             } else {
-                // Highlight matches
-                for (lineno0, line) in content.lines().enumerate() {
-                    let lineno = lineno0 + 1;
+                println!(
+                    "{}",
+                    Fixed(248).dimmed().paint(format!("{}", path.display()))
+                );
+            }
+        } else {
+            // Highlight matches
+            for (lineno0, line) in content.lines().enumerate() {
+                let lineno = lineno0 + 1;
 
-                    let highlighted: Option<String> = highlight_matches(&re, line);
-                    if let Some(hline) = highlighted {
-                        if last != pathstr {
-                            if !last.is_empty() {
-                                // Print separator unless this is the first loop
-                                println!();
-                            }
-                            println!("{}", Blue.paint(pathstr));
-                            last = String::from(pathstr);
+                let highlighted: Option<String> = highlight_matches(&re, line);
+                if let Some(hline) = highlighted {
+                    if last != pathstr {
+                        if !last.is_empty() {
+                            // Print separator unless this is the first loop
+                            println!();
                         }
-
-                        println!(
-                            "{}   {}",
-                            Fixed(248).dimmed().paint(format!("{:5}", lineno)),
-                            hline
-                        );
+                        println!("{}", Blue.paint(pathstr));
+                        last = String::from(pathstr);
                     }
+
+                    println!(
+                        "{}   {}",
+                        Fixed(248).dimmed().paint(format!("{:5}", lineno)),
+                        hline
+                    );
                 }
             }
         }
