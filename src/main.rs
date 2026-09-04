@@ -161,17 +161,13 @@ fn replace_in_file(re: &Regex, path: &Path, content: &str, replacement: &str) ->
     Ok(true)
 }
 
-fn main() -> Result<()> {
-    setup_ctrlc();
-
-    let args = CliArgs::parse();
-
+fn run(args: &CliArgs) -> Result<()> {
     let re = build_regex(&args.pattern, args.case_insensitive)?;
 
     let mut last: String = String::new();
 
     let all_paths: Vec<PathBuf> = if !args.paths.is_empty() {
-        args.paths
+        args.paths.clone()
     } else {
         match files_from_git() {
             Ok(paths) => paths,
@@ -232,4 +228,11 @@ fn main() -> Result<()> {
     }
 
     Ok(())
+}
+
+fn main() -> Result<()> {
+    setup_ctrlc();
+
+    let args = CliArgs::parse();
+    run(&args)
 }
