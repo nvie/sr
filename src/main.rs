@@ -85,6 +85,13 @@ fn include_entry(entry: &DirEntry) -> bool {
     is_file(entry) || !is_hidden(entry)
 }
 
+fn build_regex(pattern: &str, case_insensitive: bool) -> Result<Regex> {
+    RegexBuilder::new(pattern)
+        .case_insensitive(case_insensitive)
+        .build()
+        .with_context(|| format!("Not a valid regex: `{}`", pattern))
+}
+
 fn highlight_matches(re: &Regex, line: &str) -> Option<String> {
     let mut rv = String::from(line);
 
@@ -109,11 +116,7 @@ fn main() -> Result<()> {
 
     let args = CliArgs::parse();
 
-    // We may want to move this to a native "Cli" arg type? Read the clap docs to see how!
-    let re = RegexBuilder::new(&args.pattern)
-        .case_insensitive(args.case_insensitive)
-        .build()
-        .with_context(|| format!("Not a valid regex: `{}`", &args.pattern))?;
+    let re = build_regex(&args.pattern, args.case_insensitive)?;
 
     let mut last: String = String::new();
 
