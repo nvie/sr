@@ -31,9 +31,9 @@ GitHub release + Homebrew tap lines. It is run manually by nvie; never run it.
 - **Errors: `anyhow`.** Functions that can fail return `Result<T>` (the
   `anyhow::Result` alias) and attach `.with_context(|| ...)` with a
   user-readable message. `main()` returns `Result<()>`.
-- **CLI: `clap` derive** on `CliArgs`, short flags spelled explicitly
-  (`#[clap(short = 's', long = "search")]`). Note clap 3 syntax —
-  `#[clap(...)]`, `parse(from_os_str)` — not clap 4's `#[arg(...)]`.
+- **CLI: `clap` 4 derive** on `CliArgs`, short flags spelled explicitly
+  (`#[arg(short = 's', long = "search")]`); the struct-level attribute is
+  `#[command(...)]`. `PathBuf` fields need no `value_parser` — clap derives one.
 - **Output styling: `ansi_term`.** The palette is fixed and meaningful:
   `Blue` = file header, `Purple` = the matched substring, `Fixed(248).dimmed()`
   = de-emphasized (line numbers, unchanged/binary files). Reuse these, don't add
@@ -55,6 +55,10 @@ GitHub release + Homebrew tap lines. It is run manually by nvie; never run it.
   error. If you touch that path, prefer fixing it properly over adding another
   `unwrap`.
 - Replacement strings use `regex` crate syntax for groups: `$1`, `${name}`.
+- `Cargo.lock` pins `proc-macro2`, `quote`, `syn`, `clap_lex` and `unicode-ident`
+  to the last versions that still build on rustc 1.69 (the toolchain in use here).
+  A bare `cargo update` on 1.69 will pull versions that refuse to compile; on a
+  newer toolchain the pins can simply be lifted.
 
 ## Releasing
 

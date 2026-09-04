@@ -3,7 +3,6 @@ name = "sr"
 description = "A mass search & replace tool"
 authors = ["Vincent Driessen"]
 license = "MIT"
-license-file = "LICENSE"
 version = "0.1.1"
 edition = "2021"
 
@@ -12,7 +11,7 @@ edition = "2021"
 [dependencies]
 ansi_term = "0.12"
 anyhow = "1.0"
-clap = { version = "3.0", features = ["derive"] }
+clap = { version = "4", features = ["derive"] }
 content_inspector = "0.2"
 ctrlc = "3.2"
 regex = "1.5"

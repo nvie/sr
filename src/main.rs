@@ -12,21 +12,20 @@ use std::string::String;
 use walkdir::{DirEntry, WalkDir};
 
 #[derive(Parser)]
-#[clap(version, about, long_about = None)]
+#[command(version, about, long_about = None)]
 struct CliArgs {
-    #[clap(short, long)]
+    #[arg(short, long)]
     verbose: bool,
 
-    #[clap(short = 'i', long = "case-insensitive")]
+    #[arg(short = 'i', long = "case-insensitive")]
     case_insensitive: bool,
 
-    #[clap(short = 's', long = "search")]
+    #[arg(short = 's', long = "search")]
     pattern: String,
 
-    #[clap(short = 'r', long = "replace")]
+    #[arg(short = 'r', long = "replace")]
     replace: Option<String>,
 
-    #[clap(parse(from_os_str))]
     paths: Vec<PathBuf>,
 }
 
