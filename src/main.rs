@@ -119,6 +119,9 @@ fn include_entry(entry: &DirEntry) -> bool {
 fn build_regex(pattern: &str, case_insensitive: bool) -> Result<Regex> {
     RegexBuilder::new(pattern)
         .case_insensitive(case_insensitive)
+        // Preview mode matches line by line, so `^` and `$` have to anchor to line boundaries in
+        // replace mode too, where the regex runs against the file's entire content at once
+        .multi_line(true)
         .build()
         .with_context(|| format!("Not a valid regex: `{}`", pattern))
 }
@@ -533,6 +536,20 @@ mod tests {
 
         assert!(replace_in_file(&re, &path, "hello world\n", "$2 $1").unwrap());
         assert_eq!(fs::read_to_string(&path).unwrap(), "world hello\n");
+    }
+
+    #[test]
+    fn replacing_anchors_them_at_line_boundaries() {
+        let tmp = tempdir();
+        let content = "const a = 1\nfunction f() {}\n";
+        let path = write_file(tmp.path(), "a.txt", content);
+        let re = build_regex("^(function|const)", false).unwrap();
+
+        assert!(replace_in_file(&re, &path, content, "export $1").unwrap());
+        assert_eq!(
+            fs::read_to_string(&path).unwrap(),
+            "export const a = 1\nexport function f() {}\n"
+        );
     }
 
     #[test]

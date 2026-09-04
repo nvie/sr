@@ -55,6 +55,9 @@ GitHub release + Homebrew tap lines. It is run manually by nvie; never run it.
   error. If you touch that path, prefer fixing it properly over adding another
   `unwrap`.
 - Replacement strings use `regex` crate syntax for groups: `$1`, `${name}`.
+- `build_regex` sets `multi_line(true)`: preview matches line by line, but replace runs the
+  regex against the whole file at once, so without it `^`/`$` would only anchor to the start
+  and end of the file in replace mode.
 
 ## Releasing
 

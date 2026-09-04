@@ -86,6 +86,32 @@ fn replaces_matches_in_place() {
 }
 
 #[test]
+fn replaces_anchored_matches_on_every_line() {
+    let tmp = tempdir();
+    let path = write_file(
+        tmp.path(),
+        "a.txt",
+        "const a = 1\nfunction f() {}\nlet b = 2;\n",
+    );
+
+    let output = sr(&["-s", "^(function|const)", "-r", "export $1", &path]);
+
+    assert!(output.status.success());
+    assert_eq!(
+        fs::read_to_string(&path).unwrap(),
+        "export const a = 1\nexport function f() {}\nlet b = 2;\n"
+    );
+
+    let output = sr(&["-s", ";$", "-r", "", &path]);
+
+    assert!(output.status.success());
+    assert_eq!(
+        fs::read_to_string(&path).unwrap(),
+        "export const a = 1\nexport function f() {}\nlet b = 2\n"
+    );
+}
+
+#[test]
 fn reports_binary_files_when_verbose() {
     let tmp = tempdir();
     let path = write_file(tmp.path(), "a.bin", "needle\0\0\0");
