@@ -126,6 +126,30 @@ fn highlight_matches(re: &Regex, line: &str) -> Option<String> {
     }
 }
 
+fn print_matches(re: &Regex, pathstr: &str, content: &str, last: &mut String) {
+    for (lineno0, line) in content.lines().enumerate() {
+        let lineno = lineno0 + 1;
+
+        let highlighted: Option<String> = highlight_matches(re, line);
+        if let Some(hline) = highlighted {
+            if last != pathstr {
+                if !last.is_empty() {
+                    // Print separator unless this is the first loop
+                    println!();
+                }
+                println!("{}", Blue.paint(pathstr));
+                *last = String::from(pathstr);
+            }
+
+            println!(
+                "{}   {}",
+                Fixed(248).dimmed().paint(format!("{:5}", lineno)),
+                hline
+            );
+        }
+    }
+}
+
 fn main() -> Result<()> {
     setup_ctrlc();
 
@@ -187,27 +211,7 @@ fn main() -> Result<()> {
             }
         } else {
             // Highlight matches
-            for (lineno0, line) in content.lines().enumerate() {
-                let lineno = lineno0 + 1;
-
-                let highlighted: Option<String> = highlight_matches(&re, line);
-                if let Some(hline) = highlighted {
-                    if last != pathstr {
-                        if !last.is_empty() {
-                            // Print separator unless this is the first loop
-                            println!();
-                        }
-                        println!("{}", Blue.paint(pathstr));
-                        last = String::from(pathstr);
-                    }
-
-                    println!(
-                        "{}   {}",
-                        Fixed(248).dimmed().paint(format!("{:5}", lineno)),
-                        hline
-                    );
-                }
-            }
+            print_matches(&re, pathstr, &content, &mut last);
         }
     }
 
