@@ -46,8 +46,11 @@ GitHub release + Homebrew tap lines. It is run manually by nvie; never run it.
 
 ## Gotchas
 
-- `git ls-files` escapes filenames containing unusual characters; `sr` currently
-  does not unescape them (see the TODO in `files_from_git`).
+- `files_from_git` passes `-z` to `git ls-files` on purpose: without it git quotes
+  and backslash-escapes any name containing a quote, a newline or a non-ASCII
+  byte, and `sr` would then look for a file that does not exist. `parse_ls_files`
+  splits the NUL-separated output; `path_from_bytes` keeps names byte-exact on
+  Unix, where a file name need not be valid UTF-8.
 - `is_file` does `entry.metadata().unwrap()` — it will panic on a metadata
   error. If you touch that path, prefer fixing it properly over adding another
   `unwrap`.

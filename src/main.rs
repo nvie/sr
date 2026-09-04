@@ -8,7 +8,6 @@ use std::fs;
 use std::io::{self, Read, Write};
 use std::path::{Path, PathBuf};
 use std::process::Command;
-use std::str::from_utf8;
 use std::string::String;
 use walkdir::{DirEntry, WalkDir};
 
@@ -44,6 +43,7 @@ fn files_from_git() -> Result<Vec<PathBuf>> {
     let out = Command::new("git")
         .arg("ls-files")
         .args([
+            "-z",
             "--cached",
             "--modified",
             "--exclude-standard",
@@ -51,11 +51,30 @@ fn files_from_git() -> Result<Vec<PathBuf>> {
         ])
         .output()?;
 
-    // TODO: It's a known thing that git ls-files will "escape" file names with weird characters in
-    // them. We should read up on how to convert those back to normal strings.
+    Ok(parse_ls_files(&out.stdout))
+}
 
-    let raw = from_utf8(&out.stdout)?;
-    Ok(raw.lines().map(PathBuf::from).collect())
+fn parse_ls_files(raw: &[u8]) -> Vec<PathBuf> {
+    // `git ls-files -z` writes each name verbatim, terminated by a NUL. Without `-z` git would
+    // quote and backslash-escape any name containing a quote, a newline or a non-ASCII byte.
+    raw.split(|byte| *byte == b'\0')
+        .filter(|name| !name.is_empty())
+        .map(path_from_bytes)
+        .collect()
+}
+
+#[cfg(unix)]
+fn path_from_bytes(raw: &[u8]) -> PathBuf {
+    use std::ffi::OsStr;
+    use std::os::unix::ffi::OsStrExt;
+
+    // A Unix file name is an arbitrary byte string, so it needs no decoding
+    PathBuf::from(OsStr::from_bytes(raw))
+}
+
+#[cfg(not(unix))]
+fn path_from_bytes(raw: &[u8]) -> PathBuf {
+    PathBuf::from(String::from_utf8_lossy(raw).into_owned())
 }
 
 fn basename(path: &Path) -> Option<&str> {
@@ -246,6 +265,7 @@ fn main() -> Result<()> {
 mod tests {
     use super::*;
     use std::collections::HashSet;
+    use std::str::from_utf8;
     use tempfile::{Builder, TempDir};
 
     fn tempdir() -> TempDir {
@@ -621,6 +641,52 @@ mod tests {
             format!("{}", result.unwrap_err()),
             "Not a valid regex: `foo(`"
         );
+    }
+
+    #[test]
+    fn parsing_nul_separated_file_names() {
+        assert_eq!(
+            parse_ls_files(b"Cargo.toml\0src/main.rs\0"),
+            vec![PathBuf::from("Cargo.toml"), PathBuf::from("src/main.rs")]
+        );
+    }
+
+    #[test]
+    fn parsing_empty_git_output() {
+        assert!(parse_ls_files(b"").is_empty());
+        assert!(parse_ls_files(b"\0").is_empty());
+    }
+
+    #[test]
+    fn parsing_file_names_git_would_otherwise_escape() {
+        // Without `-z`, git hands these back as `"quo\"te.txt"` and `"newline\nin-name.txt"`
+        assert_eq!(
+            parse_ls_files(b"quo\"te.txt\0newline\nin-name.txt\0with space.txt\0"),
+            vec![
+                PathBuf::from("quo\"te.txt"),
+                PathBuf::from("newline\nin-name.txt"),
+                PathBuf::from("with space.txt"),
+            ]
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn parsing_file_names_that_are_not_utf8() {
+        use std::ffi::OsStr;
+        use std::os::unix::ffi::OsStrExt;
+
+        let parsed = parse_ls_files(b"latin\xe9.txt\0plain.txt\0");
+
+        assert_eq!(
+            parsed,
+            vec![
+                PathBuf::from(OsStr::from_bytes(b"latin\xe9.txt")),
+                PathBuf::from("plain.txt"),
+            ]
+        );
+        // The undecodable name survives byte for byte
+        assert_eq!(parsed[0].as_os_str().as_bytes(), b"latin\xe9.txt");
     }
 
     #[test]
