@@ -18,6 +18,14 @@ fn sr(args: &[&str]) -> Output {
         .expect("failed to run sr")
 }
 
+fn sr_in(dir: &Path, args: &[&str]) -> Output {
+    Command::new(env!("CARGO_BIN_EXE_sr"))
+        .args(args)
+        .current_dir(dir)
+        .output()
+        .expect("failed to run sr")
+}
+
 fn stdout(output: &Output) -> String {
     String::from_utf8(output.stdout.clone()).unwrap()
 }
@@ -113,4 +121,21 @@ fn prints_its_version() {
 
     assert!(output.status.success());
     assert!(stdout(&output).contains(env!("CARGO_PKG_VERSION")));
+}
+
+#[test]
+fn refuses_to_run_outside_a_git_repository() {
+    let tmp = tempdir();
+    let path = write_file(tmp.path(), "a.txt", "needle\n");
+
+    // Without paths, and with an explicit path: neither is allowed outside a repository
+    for args in [vec!["-s", "needle"], vec!["-s", "needle", &path]] {
+        let output = sr_in(tmp.path(), &args);
+
+        assert!(!output.status.success());
+        assert!(stderr(&output).contains("Not in a Git repository"));
+    }
+
+    // The file it was pointed at is untouched
+    assert_eq!(fs::read_to_string(&path).unwrap(), "needle\n");
 }

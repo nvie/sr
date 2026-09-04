@@ -1,5 +1,5 @@
 use ansi_term::Colour::{Blue, Fixed, Purple};
-use anyhow::{Context, Result};
+use anyhow::{bail, Context, Result};
 use clap::Parser;
 use content_inspector::inspect;
 use ctrlc::set_handler;
@@ -38,6 +38,15 @@ fn setup_ctrlc() {
     .expect("Error setting Ctrl-C handler");
 }
 
+fn is_inside_git_repo() -> Result<bool> {
+    let out = Command::new("git")
+        .args(["rev-parse", "--is-inside-work-tree"])
+        .output()
+        .with_context(|| "Unable to run `git`".to_string())?;
+
+    Ok(out.status.success() && out.stdout.starts_with(b"true"))
+}
+
 fn files_from_git() -> Result<Vec<PathBuf>> {
     // Lists all local files under Git control
     let out = Command::new("git")
@@ -50,6 +59,10 @@ fn files_from_git() -> Result<Vec<PathBuf>> {
             "--deduplicate",
         ])
         .output()?;
+
+    if !out.status.success() {
+        bail!("{}", String::from_utf8_lossy(&out.stderr).trim());
+    }
 
     Ok(parse_ls_files(&out.stdout))
 }
@@ -189,6 +202,10 @@ fn replace_in_file(re: &Regex, path: &Path, content: &str, replacement: &str) ->
 }
 
 fn run(args: &CliArgs, out: &mut impl Write, err: &mut impl Write) -> Result<()> {
+    if !is_inside_git_repo()? {
+        bail!("Not in a Git repository");
+    }
+
     let re = build_regex(&args.pattern, args.case_insensitive)?;
 
     let mut last: String = String::new();
@@ -196,7 +213,7 @@ fn run(args: &CliArgs, out: &mut impl Write, err: &mut impl Write) -> Result<()>
     let all_paths: Vec<PathBuf> = if !args.paths.is_empty() {
         args.paths.clone()
     } else {
-        files_from_git().with_context(|| "No input files specified".to_string())?
+        files_from_git()?
     };
 
     let mut count = 0;
