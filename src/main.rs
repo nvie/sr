@@ -150,6 +150,17 @@ fn print_matches(re: &Regex, pathstr: &str, content: &str, last: &mut String) {
     }
 }
 
+fn replace_in_file(re: &Regex, path: &Path, content: &str, replacement: &str) -> Result<bool> {
+    let new_content = re.replace_all(content, replacement);
+    if content == new_content {
+        return Ok(false);
+    }
+
+    fs::write(path, &*new_content)
+        .with_context(|| format!("Unable to write to file `{}`", path.display()))?;
+    Ok(true)
+}
+
 fn main() -> Result<()> {
     setup_ctrlc();
 
@@ -197,10 +208,7 @@ fn main() -> Result<()> {
 
         if let Some(ref replacement) = args.replace {
             // Inline-replace matches
-            let new_content = re.replace_all(&content, replacement);
-            if content != new_content {
-                fs::write(&path, &*new_content)
-                    .with_context(|| format!("Unable to write to file `{}`", path.display()))?;
+            if replace_in_file(&re, &path, &content, replacement)? {
                 count += 1;
                 println!("{}", path.display());
             } else {
