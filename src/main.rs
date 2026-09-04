@@ -94,7 +94,7 @@ fn basename(path: &Path) -> Option<&str> {
 }
 
 fn is_hidden(entry: &DirEntry) -> bool {
-    basename(entry.path()).map_or(false, |s| s.starts_with('.'))
+    basename(entry.path()).is_some_and(|s| s.starts_with('.'))
 }
 
 fn is_file(entry: &DirEntry) -> bool {

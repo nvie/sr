@@ -55,10 +55,6 @@ GitHub release + Homebrew tap lines. It is run manually by nvie; never run it.
   error. If you touch that path, prefer fixing it properly over adding another
   `unwrap`.
 - Replacement strings use `regex` crate syntax for groups: `$1`, `${name}`.
-- `Cargo.lock` pins `proc-macro2`, `quote`, `syn`, `clap_lex` and `unicode-ident`
-  to the last versions that still build on rustc 1.69 (the toolchain in use here).
-  A bare `cargo update` on 1.69 will pull versions that refuse to compile; on a
-  newer toolchain the pins can simply be lifted.
 
 ## Releasing
 
