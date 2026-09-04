@@ -5,7 +5,7 @@ use content_inspector::inspect;
 use ctrlc::set_handler;
 use regex::{Regex, RegexBuilder};
 use std::fs;
-use std::io::Read;
+use std::io::{self, Read, Write};
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::str::from_utf8;
@@ -126,7 +126,13 @@ fn highlight_matches(re: &Regex, line: &str) -> Option<String> {
     }
 }
 
-fn print_matches(re: &Regex, pathstr: &str, content: &str, last: &mut String) {
+fn print_matches(
+    re: &Regex,
+    pathstr: &str,
+    content: &str,
+    last: &mut String,
+    out: &mut impl Write,
+) -> Result<()> {
     for (lineno0, line) in content.lines().enumerate() {
         let lineno = lineno0 + 1;
 
@@ -135,19 +141,21 @@ fn print_matches(re: &Regex, pathstr: &str, content: &str, last: &mut String) {
             if last != pathstr {
                 if !last.is_empty() {
                     // Print separator unless this is the first loop
-                    println!();
+                    writeln!(out)?;
                 }
-                println!("{}", Blue.paint(pathstr));
+                writeln!(out, "{}", Blue.paint(pathstr))?;
                 *last = String::from(pathstr);
             }
 
-            println!(
+            writeln!(
+                out,
                 "{}   {}",
                 Fixed(248).dimmed().paint(format!("{:5}", lineno)),
                 hline
-            );
+            )?;
         }
     }
+    Ok(())
 }
 
 fn replace_in_file(re: &Regex, path: &Path, content: &str, replacement: &str) -> Result<bool> {
@@ -161,7 +169,7 @@ fn replace_in_file(re: &Regex, path: &Path, content: &str, replacement: &str) ->
     Ok(true)
 }
 
-fn run(args: &CliArgs) -> Result<()> {
+fn run(args: &CliArgs, out: &mut impl Write, err: &mut impl Write) -> Result<()> {
     let re = build_regex(&args.pattern, args.case_insensitive)?;
 
     let mut last: String = String::new();
@@ -169,12 +177,7 @@ fn run(args: &CliArgs) -> Result<()> {
     let all_paths: Vec<PathBuf> = if !args.paths.is_empty() {
         args.paths.clone()
     } else {
-        match files_from_git() {
-            Ok(paths) => paths,
-            Err(_) => {
-                panic!("No input files specified")
-            }
-        }
+        files_from_git().with_context(|| "No input files specified".to_string())?
     };
 
     let mut count = 0;
@@ -186,17 +189,18 @@ fn run(args: &CliArgs) -> Result<()> {
 
         if !is_text_file(&path) {
             if args.verbose {
-                eprintln!(
+                writeln!(
+                    err,
                     "{} (binary)",
                     Fixed(248).dimmed().paint(pathstr.to_string())
-                );
+                )?;
             }
             continue;
         }
 
         let content = match fs::read_to_string(&path) {
             Err(_) => {
-                eprintln!("{} (read error)", pathstr);
+                writeln!(err, "{} (read error)", pathstr)?;
                 continue;
             }
             Ok(content) => content,
@@ -206,24 +210,25 @@ fn run(args: &CliArgs) -> Result<()> {
             // Inline-replace matches
             if replace_in_file(&re, &path, &content, replacement)? {
                 count += 1;
-                println!("{}", path.display());
+                writeln!(out, "{}", path.display())?;
             } else {
-                println!(
+                writeln!(
+                    out,
                     "{}",
                     Fixed(248).dimmed().paint(format!("{}", path.display()))
-                );
+                )?;
             }
         } else {
             // Highlight matches
-            print_matches(&re, pathstr, &content, &mut last);
+            print_matches(&re, pathstr, &content, &mut last, out)?;
         }
     }
 
     if args.replace.is_some() {
         if count > 0 {
-            println!("{} files changed", count);
+            writeln!(out, "{} files changed", count)?;
         } else {
-            println!("No files changed");
+            writeln!(out, "No files changed")?;
         }
     }
 
@@ -234,5 +239,5 @@ fn main() -> Result<()> {
     setup_ctrlc();
 
     let args = CliArgs::parse();
-    run(&args)
+    run(&args, &mut io::stdout(), &mut io::stderr())
 }
