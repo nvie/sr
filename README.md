@@ -1,4 +1,4 @@
-## sr
+## sr = search + replace
 
 A simple mass **S**earch & **R**eplace tool.
 
@@ -10,7 +10,7 @@ To install:
 
 The idea for `sr` is as follows: run it with just the `-s` (= search) flag
 first. You can preview the results and iterate on your regular expression until
-it produces the matches you're looking for.  Then add the `-r` (replace) flag
+it produces the matches you're looking for. Then add the `-r` (replace) flag
 to write files.
 
 Unless you specify explicit files/directories, it will only search and replace
@@ -62,7 +62,7 @@ Another example, using named match groups:
 
 ```sh
 $ sr -is '(?P<greet>hi|hello) (?P<name>.*?)!' -r 'Why ${greet}, ${name}!!'
-```                                                                       
+```
 
 Will replace:
 
@@ -70,4 +70,3 @@ Will replace:
 - `HELLO Bob!` → `Why HELLO, Bob!!`
 
 [^1]: Yet. Perhaps I'll add this feature later.
-
