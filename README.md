@@ -16,6 +16,9 @@ to write files.
 Unless you specify explicit files/directories, it will only search and replace
 in files tracked by Git. It will never write to binary files.
 
+`sr` only runs inside a Git repository, even when you pass explicit paths. That
+is on purpose: replacing is destructive, and Git is the undo button.
+
 ```sh
 $ sr -s 'banana'
 ```
@@ -49,7 +52,8 @@ $ sr -s 'banana' -r 'mango' .            # All files under this root
 
 ## Regexes and match groups
 
-The argument to `-s` is a regex.
+The argument to `-s` is a regex. `^` and `$` anchor to the start and end of
+a *line*, not of the file, and `-i` makes the match case-insensitive.
 
 Example:
 
